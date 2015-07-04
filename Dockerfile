@@ -9,9 +9,10 @@ ENV DEBIAN_FRONTEND noninteractive
 
 RUN apt-get update && apt-get install -y \
   git vim wget build-essential python-dev ca-certificates bzip2 libsm6 \
-  python3-pip npm nodejs-legacy && apt-get clean
+  npm nodejs-legacy && apt-get clean
 
-
+# add /opt/conda to PATH
+ENV PATH /opt/conda/bin:$PATH
 # install conda
 RUN echo 'export PATH=/opt/conda/bin:$PATH' > /etc/profile.d/conda.sh && \
     wget --quiet https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
@@ -27,22 +28,20 @@ RUN git clone https://github.com/jupyter/jupyterhub.git /root/jupyterhub
 RUN cd /root/jupyterhub/ && pip install -r requirements.txt && pip install .
 
 # install ipython notebook
-pip3 install "ipython[notebook]"    # use pip3
-#RUN conda install --yes ipython-notebook terminado && conda clean -yt    # use conda
+RUN conda install --yes ipython-notebook terminado && conda clean -yt
 
 # extra kernels
-#RUN pip install bash_kernel
+RUN pip install bash_kernel
 
 # create ipython profile
-#RUN ipython profile create
+RUN ipython profile create
 
 # install RISE
 RUN git clone https://github.com/damianavila/RISE.git /root/RISE
-#RUN cd /root/RISE/ && python setup.py install
+RUN cd /root/RISE/ && python setup.py install
 
+# add user
 RUN useradd -m -s /bin/bash gnimuc
-
-
 
 
 # expose port 8000 which is listened by jupyterhub
