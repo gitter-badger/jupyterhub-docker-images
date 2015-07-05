@@ -13,12 +13,34 @@ RUN apt-get update && apt-get install -y \
 
 # add /opt/conda to PATH
 ENV PATH /opt/conda/bin:$PATH
+  
 # install conda
 RUN echo 'export PATH=/opt/conda/bin:$PATH' > /etc/profile.d/conda.sh && \
     wget --quiet https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh && \
     /bin/bash /Miniconda3-latest-Linux-x86_64.sh -b -p /opt/conda && \
     rm Miniconda3-latest-Linux-x86_64.sh && \
     /opt/conda/bin/conda install --yes conda==3.14.0
+
+# add user gnimuc and give it permission 
+RUN useradd -m -s /bin/bash gnimuc
+RUN chown -R gnimuc:gnimuc /opt/conda
+
+USER gnimuc
+ENV HOME /home/gnimuc
+ENV SHELL /bin/bash
+ENV USER gnimuc
+WORKDIR $HOME
+
+# install ipython notebook
+RUN conda install --yes ipython-notebook && conda clean -yt
+
+# create ipython profile
+RUN ipython profile create
+
+# extra kernels
+#RUN pip install bash_kernel
+
+USER root
 
 # setup jupyter dependencies
 RUN npm install -g configurable-http-proxy
@@ -27,21 +49,10 @@ RUN npm install -g configurable-http-proxy
 RUN git clone https://github.com/jupyter/jupyterhub.git /root/jupyterhub
 RUN cd /root/jupyterhub/ && pip install -r requirements.txt && pip install .
 
-# install ipython notebook
-RUN conda install --yes ipython-notebook terminado && conda clean -yt
-
-# extra kernels
-RUN pip install bash_kernel
-
-# create ipython profile
-RUN ipython profile create
 
 # install RISE
 RUN git clone https://github.com/damianavila/RISE.git /root/RISE
 RUN cd /root/RISE/ && python setup.py install
-
-# add user
-RUN useradd -m -s /bin/bash gnimuc
 
 
 # expose port 8000 which is listened by jupyterhub
