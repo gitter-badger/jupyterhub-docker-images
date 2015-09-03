@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     libsm6 \
     npm \
     nodejs-legacy \
+    curl \
     && apt-get clean
 
 # add /opt/conda to PATH
@@ -30,9 +31,20 @@ RUN echo 'export PATH=/opt/conda/bin:$PATH' > /etc/profile.d/conda.sh && \
     rm Miniconda3-latest-Linux-x86_64.sh && \
     /opt/conda/bin/conda install --yes conda==3.14.0
 
+# install julia v0.4 system-wide 
+RUN mkdir -p /opt/julia_0.4.0 && \
+    curl -s -L https://status.julialang.org/download/linux-x86_64 | tar -C /opt/julia_0.4.0 -x -z --strip-components=1 -f -
+RUN ln -sf /opt/julia_0.4.0/bin/julia /usr/local/bin/
+# make a julia global packages directory and add it to LOAD_PATH
+RUN mkdir /opt/global-packages
+RUN echo 'push!(LOAD_PATH, "/opt/global-packages/.julia/v0.4/")' >> /opt/julia_0.4.0/etc/julia/juliarc.jl
+ENV JULIA_PKGDIR /opt/global-packages/.julia/
+
+RUN groupadd jupyter
+
 # add user gnimuc and give it permission 
 RUN useradd -m -s /bin/bash gnimuc
-RUN chown -R gnimuc:gnimuc /opt/conda
+RUN chown -R gnimuc:jupyter /opt/conda
 
 USER gnimuc
 ENV HOME /home/gnimuc
@@ -46,25 +58,37 @@ RUN conda install --yes ipython-notebook && conda clean -yt
 # create ipython profile
 RUN ipython profile create
 
-# change to root
+# change back to root
 USER root
 
 # setup jupyter dependencies
 RUN npm install -g configurable-http-proxy
 
-# install jupyter and use default config
+# install jupyter and use the default config
 RUN git clone https://github.com/jupyter/jupyterhub.git /root/jupyterhub
 RUN cd /root/jupyterhub/ && pip install -r requirements.txt && pip install .
+# generate jupyterhub_config.py and enable admin to add users
+RUN cd /root/ && jupyterhub --generate-config
+RUN cd /root/ && echo 'c.LocalAuthenticator.create_system_users = True' > /root/jupyterhub_config.py
+
+# install "IJulia" system-wide
+RUN julia -e 'Pkg.init()'
+RUN julia -e 'Pkg.add("IJulia")'
+# move kernelspec from gnimuc's ipython to jupyter
+RUN jupyter kernelspec list
+# move kernelspec from gnimuc's jupyter to global jupyter
+RUN cd /usr/local/share/ && mkdir -p jupyter/kernels/
+RUN cp -r /home/gnimuc/.local/share/jupyter/kernels/julia-0.4 /usr/local/share/jupyter/kernels/
 
 # install RISE 
 # we should create default path:/home/*/.jupyter/nbconfig before we install RISE
 # even though jupyter will create this path automatically when we run jupyterhub and login for the first time.
-RUN cd /home/gnimuc/ && mkdir .jupyter && cd .jupyter && mkdir nbconfig
+RUN cd /home/gnimuc/ && mkdir -p .jupyter && cd .jupyter && mkdir -p nbconfig
 RUN git clone https://github.com/damianavila/RISE.git /root/RISE
 RUN cd /root/RISE/ && python setup.py install
 
 # to fix pip permission bugs
-RUN chown -R gnimuc:gnimuc /home/gnimuc/
+RUN chown -R gnimuc:jupyter /home/gnimuc/
 
 # install extra kernels
 RUN pip install bash_kernel
